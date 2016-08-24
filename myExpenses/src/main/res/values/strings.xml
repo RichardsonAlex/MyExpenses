@@ -613,5 +613,7 @@
     <string name="crash_dialog_title">My Expenses has crashed</string>
     <string name="crash_dialog_text">An unexpected error occurred forcing the application to stop. Please help us fix this by sending us error data, all you have to do is click OK.</string>
     <string name="crash_dialog_comment_prompt">You might add your comments about the problem below:</string>
+    <string name="add_sales_tax">Add %1$s%% sales tax</string>
+    <string name="set_tax_rate">Set tax rate</string>
 </resources>
 

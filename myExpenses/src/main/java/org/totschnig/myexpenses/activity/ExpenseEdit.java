@@ -17,6 +17,7 @@ package org.totschnig.myexpenses.activity;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.DatePickerDialog;
 import android.app.Dialog;
 import android.app.NotificationManager;
@@ -24,9 +25,11 @@ import android.app.TimePickerDialog;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.MatrixCursor;
@@ -45,6 +48,7 @@ import android.support.v4.content.Loader;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.widget.PopupMenu;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -61,10 +65,13 @@ import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.FilterQueryProvider;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TableLayout;
@@ -240,6 +247,105 @@ public class ExpenseEdit extends AmountActivity implements
         R.string.dialog_confirm_discard_new_transaction;
   }
 
+
+  // TODO: encapsulate all this in a separate class
+  // TODO: apply this to templates/plans?
+  private static final String PREFKEY_LAST_TAX_RATE = "lastTaxRate";
+  private CheckBox mAddTaxCheckbox;
+  private ImageButton mSetTaxRateButton;
+  private BigDecimal mTaxRate;
+  private String mAmountWithoutTax; // saved value
+
+  private void setupTaxCheckbox() {
+    mAddTaxCheckbox = (CheckBox) findViewById(R.id.AddSalesTax);
+    updateTaxRate(MyApplication.getInstance().getSettings()
+            .getString(PREFKEY_LAST_TAX_RATE, "0.00"));
+    mAddTaxCheckbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+      @Override
+      public void onCheckedChanged(CompoundButton compoundButton, boolean checked) {
+        if (checked) {
+          addTaxToAmount();
+        } else {
+          restorePreTaxAmount();
+        }
+      }
+    });
+    mSetTaxRateButton = (ImageButton) findViewById(R.id.SetTaxRate);
+    mSetTaxRateButton.setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View view) {
+        AlertDialog.Builder alert = new AlertDialog.Builder(view.getContext());
+        alert.setTitle(R.string.set_tax_rate);
+        final AmountEditText input = new AmountEditText(view.getContext());
+        input.setFractionDigits(3);
+        // FIXME
+        alert.setView(input);
+        alert.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+          public void onClick(DialogInterface dialog, int whichButton) {
+            String rate = input.getText().toString();
+            if (TextUtils.isEmpty(rate)) {
+              return;
+            }
+            updateTaxRate(rate);
+            // save it to preferences if the update succeeded
+            SharedPreferences.Editor e = MyApplication.getInstance().getSettings().edit();
+            e.putString(PREFKEY_LAST_TAX_RATE, mTaxRate.toString());
+            e.commit();
+          }
+        });
+        alert.setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
+          public void onClick(DialogInterface dialog, int whichButton) {
+            // Do nothing
+          }
+        });
+        alert.show();
+        input.requestFocus();
+      }
+    });
+  }
+
+  protected void addTaxToAmount() {
+    if (mAmountWithoutTax != null) {
+      throw new IllegalStateException("mAmountWithoutTax should be null");
+    }
+    mAmountWithoutTax = mAmountText.getText().toString();
+    BigDecimal withoutTax = new BigDecimal(mAmountWithoutTax);
+    // need to divide by mTaxRate by 100 as it is in percent
+    BigDecimal tax = withoutTax.multiply(mTaxRate.divide(new BigDecimal(100)));
+    BigDecimal withTax = withoutTax.add(tax);
+    mAmountText.setAmount(withTax);
+  }
+
+  protected void restorePreTaxAmount() {
+    if (mAmountWithoutTax == null) {
+      throw new IllegalStateException("mAmountWithoutTax must not be null");
+    }
+    mAmountText.setText(mAmountWithoutTax);
+    mAmountWithoutTax = null;
+  }
+
+  protected void updateTaxRate(String newRateStr) {
+    try {
+      // TODO: locale? dot vs comma?
+      BigDecimal newTaxRate = new BigDecimal(newRateStr);
+      mTaxRate = newTaxRate;
+      String taxString = getString(R.string.add_sales_tax, mTaxRate.toString());
+      mAddTaxCheckbox.setText(taxString);
+      if (mAddTaxCheckbox.isChecked()) {
+        // apply the new tax value
+        restorePreTaxAmount();
+        addTaxToAmount();
+      }
+      Log.w("asdasdasdads", "Set tax rate to " + newTaxRate.toString() + " from settings: " +
+              MyApplication.getInstance().getSettings().getString(PREFKEY_LAST_TAX_RATE, "N/A"));
+    } catch (RuntimeException e) {
+      Log.e("something....", "Failed to set new tax rate to " + newRateStr, e);
+    }
+  }
+
+
+
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -264,6 +370,10 @@ public class ExpenseEdit extends AmountActivity implements
     mPayeeLabel = (TextView) findViewById(R.id.PayeeLabel);
     mPayeeText = (AutoCompleteTextView) findViewById(R.id.Payee);
     mTransferAmountText = (AmountEditText) findViewById(R.id.TranferAmount);
+
+    setupTaxCheckbox();
+
+
     mExchangeRate1Text = (AmountEditText) findViewById(R.id.ExchangeRate_1);
     mExchangeRate1Text.setFractionDigits(EXCHANGE_RATE_FRACTION_DIGITS);
     mExchangeRate1Text.addTextChangedListener(new LinkedExchangeRateTextWatchter(true));
