@@ -29,7 +29,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.MatrixCursor;
@@ -76,6 +75,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.TimePicker;
 import android.widget.Toast;
@@ -166,6 +166,8 @@ public class ExpenseEdit extends AmountActivity implements
     OnItemSelectedListener, LoaderManager.LoaderCallbacks<Cursor>,
     ContribIFace, ConfirmationDialogListener {
 
+  private static final String TAG = "ExpenseEdit";
+
   private static final String SPLIT_PART_LIST = "SPLIT_PART_LIST";
   public static final String KEY_NEW_TEMPLATE = "newTemplate";
   public static final String KEY_CLONE = "clone";
@@ -253,7 +255,9 @@ public class ExpenseEdit extends AmountActivity implements
   // TODO: apply this to templates/plans?
   private static final String PREFKEY_LAST_TAX_RATE = "lastTaxRate";
   private CheckBox mAddTaxCheckbox;
+  private CompoundButton.OnCheckedChangeListener mTaxCheckboxListener;
   private ImageButton mSetTaxRateButton;
+  private boolean mCurrentlyDoingTaxCalculation = false;
   private BigDecimal mTaxRate;
   private String mAmountWithoutTax; // saved value
 
@@ -261,7 +265,7 @@ public class ExpenseEdit extends AmountActivity implements
     mAddTaxCheckbox = (CheckBox) findViewById(R.id.AddSalesTax);
     updateTaxRate(MyApplication.getInstance().getSettings()
             .getString(PREFKEY_LAST_TAX_RATE, "0.00"));
-    mAddTaxCheckbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+    mTaxCheckboxListener = new CompoundButton.OnCheckedChangeListener() {
       @Override
       public void onCheckedChanged(CompoundButton compoundButton, boolean checked) {
         if (checked) {
@@ -270,7 +274,8 @@ public class ExpenseEdit extends AmountActivity implements
           restorePreTaxAmount();
         }
       }
-    });
+    };
+    mAddTaxCheckbox.setOnCheckedChangeListener(mTaxCheckboxListener);
     mSetTaxRateButton = (ImageButton) findViewById(R.id.SetTaxRate);
     mSetTaxRateButton.setOnClickListener(new View.OnClickListener() {
       @Override
@@ -300,8 +305,26 @@ public class ExpenseEdit extends AmountActivity implements
             // Do nothing
           }
         });
+        input.requestFocus(); // FIXME: why is this not showing the keyboard automatically?
         alert.show();
-        input.requestFocus();
+        input.requestFocus(); // FIXME: why is this not showing the keyboard automatically?
+
+      }
+    });
+    mAmountText.addTextChangedListener(new MyTextWatcher() {
+      @Override
+      public void afterTextChanged(Editable editable) {
+        if (mCurrentlyDoingTaxCalculation) {
+          // we don't want to unset the checkbox if text changes because of applying/removing tax
+          return;
+        }
+        Log.d(TAG, "Unsetting tax checkbox because amount was changed: " + editable.toString());
+        // If the user enters a new value we uncheck the tax box
+        // We have to disable the checked listener to stop the old value from being restored
+        mAddTaxCheckbox.setOnCheckedChangeListener(null);
+        mAddTaxCheckbox.setChecked(false);
+        mAddTaxCheckbox.setOnCheckedChangeListener(mTaxCheckboxListener);
+        mAmountWithoutTax = null; // tax checkbox is unset -> amountWithoutTax must be null
       }
     });
   }
@@ -310,20 +333,24 @@ public class ExpenseEdit extends AmountActivity implements
     if (mAmountWithoutTax != null) {
       throw new IllegalStateException("mAmountWithoutTax should be null");
     }
+    mCurrentlyDoingTaxCalculation = true;
     mAmountWithoutTax = mAmountText.getText().toString();
     BigDecimal withoutTax = new BigDecimal(mAmountWithoutTax);
     // need to divide by mTaxRate by 100 as it is in percent
     BigDecimal tax = withoutTax.multiply(mTaxRate.divide(new BigDecimal(100)));
     BigDecimal withTax = withoutTax.add(tax);
     mAmountText.setAmount(withTax);
+    mCurrentlyDoingTaxCalculation = false;
   }
 
   protected void restorePreTaxAmount() {
     if (mAmountWithoutTax == null) {
       throw new IllegalStateException("mAmountWithoutTax must not be null");
     }
+    mCurrentlyDoingTaxCalculation = true;
     mAmountText.setText(mAmountWithoutTax);
     mAmountWithoutTax = null;
+    mCurrentlyDoingTaxCalculation = false;
   }
 
   protected void updateTaxRate(String newRateStr) {
@@ -338,10 +365,8 @@ public class ExpenseEdit extends AmountActivity implements
         restorePreTaxAmount();
         addTaxToAmount();
       }
-      Log.w("asdasdasdads", "Set tax rate to " + newTaxRate.toString() + " from settings: " +
-              MyApplication.getInstance().getSettings().getString(PREFKEY_LAST_TAX_RATE, "N/A"));
     } catch (RuntimeException e) {
-      Log.e("something....", "Failed to set new tax rate to " + newRateStr, e);
+      Log.e(TAG, "Failed to set new tax rate to " + newRateStr, e);
     }
   }
 
