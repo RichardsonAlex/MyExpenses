@@ -254,6 +254,7 @@ public class ExpenseEdit extends AmountActivity implements
   // TODO: encapsulate all this in a separate class
   // TODO: apply this to templates/plans?
   private static final String PREFKEY_LAST_TAX_RATE = "lastTaxRate";
+  private TableRow mTaxRow;
   private CheckBox mAddTaxCheckbox;
   private CompoundButton.OnCheckedChangeListener mTaxCheckboxListener;
   private ImageButton mSetTaxRateButton;
@@ -262,6 +263,8 @@ public class ExpenseEdit extends AmountActivity implements
   private String mAmountWithoutTax; // saved value
 
   private void setupTaxCheckbox() {
+    // TODO: make sales tax checkbox a per-account setting: in most countries this is not needed
+    mTaxRow = (TableRow) findViewById(R.id.TaxRow);
     mAddTaxCheckbox = (CheckBox) findViewById(R.id.AddSalesTax);
     updateTaxRate(MyApplication.getInstance().getSettings()
             .getString(PREFKEY_LAST_TAX_RATE, "0.00"));
@@ -700,6 +703,7 @@ public class ExpenseEdit extends AmountActivity implements
     if (mOperationType == MyExpenses.TYPE_TRANSFER) {
       mAmountText.addTextChangedListener(new LinkedTransferAmountTextWatcher(true));
       mTransferAmountText.addTextChangedListener(new LinkedTransferAmountTextWatcher(false));
+      mTaxRow.setVisibility(View.GONE);
     }
     // Spinner for account and transfer account
     mAccountsAdapter = new SimpleCursorAdapter(this, android.R.layout.simple_spinner_item, null,
@@ -1271,6 +1275,7 @@ public class ExpenseEdit extends AmountActivity implements
           selected : null;
     }
     if (mOperationType == MyExpenses.TYPE_TRANSFER) {
+      mTaxRow.setVisibility(View.GONE);
       mTransaction.transfer_account = mTransferAccountSpinner.getSelectedItemId();
       final Account transferAccount = Account.getInstanceFromDb(mTransferAccountSpinner
           .getSelectedItemId());
