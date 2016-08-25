@@ -52,6 +52,7 @@ import android.text.InputType;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.method.DigitsKeyListener;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.Menu;
@@ -278,7 +279,8 @@ public class ExpenseEdit extends AmountActivity implements
         alert.setTitle(R.string.set_tax_rate);
         final AmountEditText input = new AmountEditText(view.getContext());
         input.setFractionDigits(3);
-        // FIXME
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        input.setKeyListener(DigitsKeyListener.getInstance(false, true));
         alert.setView(input);
         alert.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
           public void onClick(DialogInterface dialog, int whichButton) {
